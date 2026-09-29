@@ -8,9 +8,23 @@ import {
   getRoomsRepository,
 } from './chat.repository';
 import { CreateMessageDTO, CreateRoomDTO, Message, Room } from './chat.types';
+import { supabase } from '../../config/supabase';
+
+const broadcastToRooms = async (event: string, payload: object) => {
+  const channel = supabase.channel('rooms');
+  try {
+    await channel.httpSend(event, payload);
+  } catch (error) {
+    console.error(`Failed to broadcast ${event}`, error);
+  } finally {
+    await supabase.removeChannel(channel);
+  }
+};
 
 export const createRoomService = async (room: CreateRoomDTO): Promise<Room> => {
-  return createRoomRepository(room);
+  const newRoom = await createRoomRepository(room);
+  broadcastToRooms('room-created', newRoom);
+  return newRoom;
 };
 
 export const getRoomsService = async (): Promise<Room[]> => {
@@ -35,6 +49,7 @@ export const deleteRoomService = async (id: string): Promise<void> => {
   }
 
   await deleteRoomRepository(id);
+  broadcastToRooms('room-deleted', { id: room.id });
 };
 
 export const createMessageService = async (message: CreateMessageDTO): Promise<Message> => {

@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useEffect, useState } from 'react';
 import { api } from '@/lib/axios';
+import { supabase } from '@/lib/supabase';
 import { Room } from '@/lib/types';
 
 interface RoomsContextValue {
@@ -10,23 +11,40 @@ interface RoomsContextValue {
   deleteRoom: (id: string) => Promise<void>;
 }
 
+const appendRoom = (rooms: Room[], room: Room) =>
+  rooms.some((r) => r.id === room.id) ? rooms : [...rooms, room];
+
 const RoomsContext = createContext<RoomsContextValue | null>(null);
 
 export const RoomsProvider = ({ children }: { children: React.ReactNode }) => {
   const [rooms, setRooms] = useState<Room[]>([]);
 
   useEffect(() => {
+    const roomsChannel = supabase
+      .channel('rooms')
+      .on('broadcast', { event: 'room-created' }, ({ payload }) => {
+        setRooms((prev) => appendRoom(prev, payload as Room));
+      })
+      .on('broadcast', { event: 'room-deleted' }, ({ payload }) => {
+        setRooms((prev) => prev.filter((room) => room.id !== (payload as { id: string }).id));
+      })
+      .subscribe();
+
     const onInit = async () => {
       const res = await api.get<Room[]>('/rooms');
-      setRooms(res.data);
+      setRooms((prev) => res.data.reduce(appendRoom, prev));
     };
 
     onInit();
+
+    return () => {
+      supabase.removeChannel(roomsChannel);
+    };
   }, []);
 
   const createRoom = async (name: string) => {
     const res = await api.post<Room>('/rooms', { name });
-    setRooms((prev) => [...prev, res.data]);
+    setRooms((prev) => appendRoom(prev, res.data));
   };
 
   const deleteRoom = async (id: string) => {
