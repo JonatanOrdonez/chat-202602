@@ -15,10 +15,13 @@ const RoomsContext = createContext<RoomsContextValue | null>(null);
 export const RoomsProvider = ({ children }: { children: React.ReactNode }) => {
   const [rooms, setRooms] = useState<Room[]>([]);
 
-  const onInit = () => api.get<Room[]>('/rooms');
-
   useEffect(() => {
-    onInit().then((res) => setRooms(res.data));
+    const onInit = async () => {
+      const res = await api.get<Room[]>('/rooms');
+      setRooms(res.data);
+    };
+
+    onInit();
   }, []);
 
   const createRoom = async (name: string) => {

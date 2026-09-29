@@ -23,18 +23,17 @@ export const RoomProvider = ({
   const [room, setRoom] = useState<Room | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
 
-  const onInit = () =>
-    Promise.all([
-      api.get<Room>(`/rooms/${roomId}`),
-      api.get<Message[]>(`/rooms/${roomId}/messages`),
-    ]);
-
   useEffect(() => {
-    onInit().then(([roomRes, messagesRes]) => {
+    const onInit = async () => {
+      const [roomRes, messagesRes] = await Promise.all([
+        api.get<Room>(`/rooms/${roomId}`),
+        api.get<Message[]>(`/rooms/${roomId}/messages`),
+      ]);
       setRoom(roomRes.data);
       setMessages(messagesRes.data);
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    };
+
+    onInit();
   }, [roomId]);
 
   const createMessage = async (username: string, content: string) => {
