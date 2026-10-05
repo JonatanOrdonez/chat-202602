@@ -21,6 +21,18 @@ const broadcastToRooms = async (event: string, payload: object) => {
   }
 };
 
+const broadcastToRoom = async (roomId: string, event: string, payload: object) => {
+  const channel = supabase.channel(`rooms:${roomId}`);
+  try {
+    await channel.httpSend(event, payload);
+  } catch (error) {
+    console.error(`Failed to broadcast ${event}`, error);
+  } finally {
+    await supabase.removeChannel(channel);
+  }
+};
+
+
 export const createRoomService = async (room: CreateRoomDTO): Promise<Room> => {
   const newRoom = await createRoomRepository(room);
   broadcastToRooms('room-created', newRoom);
@@ -50,6 +62,7 @@ export const deleteRoomService = async (id: string): Promise<void> => {
 
   await deleteRoomRepository(id);
   broadcastToRooms('room-deleted', { id: room.id });
+  broadcastToRoom(room.id, 'room-deleted', { id: room.id });
 };
 
 export const createMessageService = async (message: CreateMessageDTO): Promise<Message> => {
@@ -59,7 +72,9 @@ export const createMessageService = async (message: CreateMessageDTO): Promise<M
     throw Boom.notFound('Room not found');
   }
 
-  return createMessageRepository(message);
+  const newMessage = await createMessageRepository(message);
+  broadcastToRoom(message.roomId, 'message-created', newMessage);
+  return newMessage;
 };
 
 export const getMessagesByRoomIdService = async (roomId: string): Promise<Message[]> => {
