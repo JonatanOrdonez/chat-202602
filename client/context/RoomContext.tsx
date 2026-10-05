@@ -3,6 +3,8 @@
 import { createContext, useContext, useEffect, useState } from 'react';
 import { api } from '@/lib/axios';
 import { Message, Room } from '@/lib/types';
+import { supabase } from '@/lib/supabase';
+import { useRouter } from 'next/navigation';
 
 interface RoomContextValue {
   room: Room | null;
@@ -22,19 +24,38 @@ export const RoomProvider = ({
 }) => {
   const [room, setRoom] = useState<Room | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
+  const router = useRouter();
 
-  useEffect(() => {
-    const onInit = async () => {
-      const [roomRes, messagesRes] = await Promise.all([
-        api.get<Room>(`/rooms/${roomId}`),
-        api.get<Message[]>(`/rooms/${roomId}/messages`),
-      ]);
-      setRoom(roomRes.data);
-      setMessages(messagesRes.data);
-    };
+ useEffect(() => {
+      const roomChannel = supabase
+    .channel(`rooms:${roomId}`)
+    .on('broadcast', { event: 'room-deleted' }, ({ payload }) => {
+      router.push('/');
+    })
+    .on('broadcast', { event: 'message-created' }, ({ payload }) => {
+      setMessages((prev) => prev.find((msg) => msg.id === (payload as Message).id) ? prev : [...prev, payload as Message]);
+    })
+    .subscribe();
 
-    onInit();
-  }, [roomId]);
+
+   const onInit = async () => {
+     const [roomRes, messagesRes] = await Promise.all([
+       api.get<Room>(`/rooms/${roomId}`),
+       api.get<Message[]>(`/rooms/${roomId}/messages`),
+     ]);
+     setRoom(roomRes.data);
+     setMessages(messagesRes.data);
+   };
+
+
+   onInit();
+
+
+   return () => {
+     supabase.removeChannel(roomChannel);
+   };
+ }, [roomId]);
+
 
   const createMessage = async (username: string, content: string) => {
     const res = await api.post<Message>(`/rooms/${roomId}/messages`, { username, content });
